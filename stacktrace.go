@@ -49,6 +49,33 @@ type StacktraceFrame struct {
 	InApp        bool     `json:"in_app"`
 }
 
+func GetOrNewStacktrace(err error, skip int, context int, appPackagePrefixes []string) *Stacktrace {
+	stacktracer, errHasStacktrace := err.(interface {
+		StackTrace() []uintptr
+	})
+	if errHasStacktrace {
+		var frames []*StacktraceFrame
+		for _, f := range stacktracer.StackTrace() {
+			pc := uintptr(f) - 1
+			fn := runtime.FuncForPC(pc)
+			var file string
+			var line int
+			if fn != nil {
+				file, line = fn.FileLine(pc)
+			} else {
+				file = "unknown"
+			}
+			frame := NewStacktraceFrame(pc, file, line, context, appPackagePrefixes)
+			if frame != nil {
+				frames = append([]*StacktraceFrame{frame}, frames...)
+			}
+		}
+		return &Stacktrace{Frames: frames}
+	} else {
+		return NewStacktrace(skip+1, context, appPackagePrefixes)
+	}
+}
+
 // Intialize and populate a new stacktrace, skipping skip frames.
 //
 // context is the number of surrounding lines that should be included for context.
